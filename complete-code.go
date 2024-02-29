@@ -8,11 +8,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-	"github.com/gofiber/fiber/v2/middleware/timeout"
-	"github.com/gofiber/template/html"
+	"github.com/gofiber/template/html/v2"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -37,7 +35,7 @@ var (
 
 func init() {
 	var err error
-	dsn := "user=your_db_user password=your_db_password dbname=your_db_name host=your_db_host port=your_db_port sslmode=disable TimeZone=Asia/Jakarta"
+    	dsn := "user=your_db_user password=your_db_password dbname=your_db_name host=your_db_host port=your_db_port sslmode=disable TimeZone=Asia/Jakarta"
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
@@ -54,10 +52,8 @@ func main() {
 		Views: html.New("./views", ".html"),
 	})
 
-	engine.Use(requestid.New())
-	engine.Use(logger.New())
-	engine.Use(recover.New())
-	engine.Use(timeout.New())
+	engine.Use(requestid.New()) 
+	engine.Use(recover.New()) 
 
 	// Example of rate limiting
 	engine.Use(limiter.New(limiter.Config{
@@ -71,10 +67,8 @@ func main() {
 	// Routes for Student CRUD
 	engine.Get("/students", getStudents)
 	engine.Get("/students/:id", getStudent)
-	engine.Post("/students", createStudent)
-	engine.Put("/students/:id", updateStudent)
-	engine.Delete("/students/:id", deleteStudent)
-
+	engine.Post("/students", createStudent) 
+	
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
@@ -110,24 +104,4 @@ func createStudent(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
 	return c.JSON(student)
-}
-
-func updateStudent(c *fiber.Ctx) error {
-	id := c.Params("id")
-	student := new(Student)
-	if err := c.BodyParser(student); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString(err.Error())
-	}
-	if err := db.First(&Student{}, id).Updates(student).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
-	}
-	return c.JSON(student)
-}
-
-func deleteStudent(c *fiber.Ctx) error {
-	id := c.Params("id")
-	if err := db.Delete(&Student{}, id).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
-	}
-	return c.SendString(fmt.Sprintf("Student with ID %s is deleted", id))
 }
