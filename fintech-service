@@ -1,0 +1,159 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/gofiber/template/html/v2"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+// Customer model
+type Customer struct {
+	ID             uint   `gorm:"primaryKey"`
+	NamaCustomer   string `gorm:"size:150"`
+	NomorHandphone string `gorm:"size:200"`
+	NomorKTP       string `gorm:"size:100"`
+	Email          string `gorm:"size:100"`
+	Saldo          int
+	IsActive       bool      `gorm:"default:true"`
+	CreatedBy      string    `gorm:"size:10"`
+	CreatedDate    time.Time `gorm:"default:now()"`
+	UpdatedBy      string    `gorm:"size:10"`
+	UpdatedDate    time.Time
+}
+
+func (Customer) TableName() string {
+	return "data_customer"
+}
+
+var (
+	db *gorm.DB
+)
+
+func init() {
+	var err error
+	dsn := `user=yrtrtredgdgdf 
+	password=rararara 
+	dbname=hahahahaha 
+	host=123.123.123.123 port=32632121213222 
+	sslmode=disable TimeZone=Asia/Jakarta`
+
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Auto Migrate
+	db.AutoMigrate(&Customer{})
+}
+
+func main() {
+	engine := fiber.New(fiber.Config{
+		Views: html.New("./views", ".html"),
+	})
+
+	engine.Use(requestid.New())
+	engine.Use(recover.New())
+
+	// Example of rate limiting
+	engine.Use(limiter.New(limiter.Config{
+		Max: 5,
+	}))
+
+	engine.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Hello, Fiber!")
+	})
+
+	// Routes for Customer CRUD
+	engine.Get("/customers", getCustomers)
+	engine.Get("/customers/:id", getCustomer)
+	engine.Post("/customers", createCustomer)
+	engine.Put("/customers/:id", updateCustomer)
+	engine.Delete("/customers/:id", deleteCustomer)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+
+	log.Fatal(engine.Listen(":" + port))
+}
+
+// Handlers
+func getCustomers(c *fiber.Ctx) error {
+	var customers []Customer
+	if err := db.Find(&customers).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	return c.JSON(customers)
+}
+
+func getCustomer(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var customer Customer
+	if err := db.Where("is_active = ?", true).First(&customer, id).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).SendString(err.Error())
+	}
+	return c.JSON(customer)
+}
+
+func createCustomer(c *fiber.Ctx) error {
+	customer := new(Customer)
+	if err := c.BodyParser(customer); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+	}
+	if err := db.Create(customer).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	return c.JSON(customer)
+}
+
+func updateCustomer(c *fiber.Ctx) error {
+	id := c.Params("id")
+	customer := new(Customer)
+	if err := c.BodyParser(customer); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+	}
+
+	query := fmt.Sprintf(`UPDATE "data_customer" 
+	SET "is_active"=%t, "nama_customer"='%s', "nomor_handphone"='%s', "nomor_ktp"='%s', 
+		"email"=%s, "saldo"=%d WHERE "data_pegawai"."id" = '%s'`,
+		customer.IsActive, customer.NamaCustomer, customer.NomorHandphone, customer.NomorKTP,
+		customer.Email, customer.Saldo, id)
+
+	if err := db.Exec(query).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	return c.JSON(customer)
+}
+
+func deleteCustomer(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	query := fmt.Sprintf(`UPDATE data_customer SET is_active=false WHERE data_customer.id = '%s'`, id)
+
+	if err := db.Exec(query).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	return c.SendString(fmt.Sprintf("Pegawai with ID %s is deactivated", id))
+}
+
+func deleteCustomerPermanen(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var customer Customer
+	db.Delete(&customer, id)
+	return c.SendString(fmt.Sprintf("Customer with ID %s deleted", id))
+}
